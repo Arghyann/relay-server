@@ -24,6 +24,7 @@ jobs:
       - name: Build
         run: |
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o relay-server ./server
+          chmod +x relay-server
 
       - name: Upload binary
         uses: appleboy/scp-action@v0.1.7
