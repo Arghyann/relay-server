@@ -1,69 +1,87 @@
-# relay
+# relay-tunnel
 
-A lightweight, TLS-encrypted HTTP CONNECT tunnel and TCP relay with SQLite API key authentication. Designed to forward ports to IPv6-only servers (databases, SSH, etc.) from IPv4 networks.
-
----
-
-## Server
-
-### 1. Generate Certificates
-Run once inside the `server/` directory:
-```bash
-cd server
-openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 365 -nodes -subj "/CN=localhost"
-```
-
-### 2. Run the Server
-```bash
-go run ./server
-```
-*Listens on port `28473` by default. Automatically generates an initial `admin` API key in `relay.db` on first run.*
-
-### 3. Key Management
-```bash
-# Add a key for a user
-./relay-server -add-key "alice"
-
-# List all keys and statuses
-./relay-server -list-keys
-```
+A secure, TLS-encrypted tunnel client to connect to remote IPv6 and private services (PostgreSQL, Redis, SSH, etc.) from any local machine.
 
 ---
 
-## Client
+## Installation
 
-### 1. Install CLI Tool
+### Option 1: Using Go Install
 ```bash
+go install github.com/Arghyann/relay-server.git/client@latest
+```
+*(Installs directly to `~/go/bin/client`)*
+
+### Option 2: From Source
+Clone the repository and build:
+```bash
+git clone https://github.com/Arghyann/relay-server.git
+cd relay-server
 go build -o ~/.local/bin/relay-tunnel ./client
 ```
 
-### 2. Run a Tunnel
+---
+
+## Quick Start
+
+To open a tunnel, you need:
+1. The **target address** you want to reach (e.g. `db.example.supabase.co:5432` or `[2001:...]:22`)
+2. Your assigned **API Key** (`rk_...`)
+
 ```bash
-relay-tunnel \
-  -relay "<SERVER_IP>:28473" \
-  -target "[<IPV6_TARGET>]:<TARGET_PORT>" \
-  -local <LOCAL_PORT> \
-  -key "<API_KEY>"
+relay-tunnel -target "<TARGET_ADDRESS>:<PORT>" -key "<YOUR_API_KEY>"
 ```
+
+By default, this binds locally to port `5432`.
+
+---
+
+## CLI Options
+
+| Flag | Description | Default |
+| :--- | :--- | :--- |
+| **`-target`** *(required)* | Remote target address and port (e.g. `[2001:...]:22`) | `""` |
+| **`-key`** *(required)* | Your personal API key | `""` |
+| **`-local`** | Local port to listen on your machine | `5432` |
+| **`-relay`** | Relay server endpoint | `13.207.62.103:28473` |
 
 ---
 
 ## Examples
 
-### PostgreSQL (e.g., Supabase)
+### 1. PostgreSQL / Supabase
+Start the tunnel on your machine:
 ```bash
-# 1. Start tunnel
-relay-tunnel -target "db.your-id.supabase.co:5432" -local 5432 -key "rk_..."
+relay-tunnel -target "db.your-project.supabase.co:5432" -local 5432 -key "rk_..."
+```
 
-# 2. Connect
+Connect your application or database GUI to `localhost`:
+```bash
 psql "postgresql://postgres:password@127.0.0.1:5432/postgres?sslmode=require"
 ```
 
-### SSH
-```bash
-# 1. Start tunnel
-relay-tunnel -target "[2406:da1a:...]:22" -local 2222 -key "rk_..."
+---
 
-# 2. Connect
-ssh -i ~/.ssh/key user@127.0.0.1 -p 2222
+### 2. SSH into an IPv6 Machine
+Start the tunnel on port `2222`:
+```bash
+relay-tunnel -target "[2406:da1a:...]:22" -local 2222 -key "rk_..."
+```
+
+SSH directly into `localhost`:
+```bash
+ssh -i ~/.ssh/id_ed25519 user@127.0.0.1 -p 2222
+```
+
+---
+
+### 3. Redis / Cache
+Start the tunnel on port `6379`:
+```bash
+relay-tunnel -target "[2001:db8:...]:6379" -local 6379 -key "rk_..."
+```
+
+Connect using `redis-cli`:
+```bash
+redis-cli -p 6379
 ```
