@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/tls"
 	"database/sql"
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -11,16 +12,37 @@ import (
 )
 
 func main() {
-	cert, err := tls.LoadX509KeyPair("cert.pem", "key.pem")
-	if err != nil {
-		log.Fatal("Failed to load keys: ", err)
-	}
+	addKeyName := flag.String("add-key", "", "Generate a new API key for the given name and exit")
+	listKeys := flag.Bool("list-keys", false, "List all active API keys and exit")
+	port := flag.String("port", "28473", "Port to listen on")
+	flag.Parse()
 
 	db, err := createDb()
 	if err != nil {
 		log.Fatal("Couldn't init DB: ", err)
 	}
 	defer db.Close()
+
+	if *addKeyName != "" {
+		key, err := addKey(db, *addKeyName)
+		if err != nil {
+			log.Fatal("Failed to create key: ", err)
+		}
+		fmt.Printf("Created API Key for [%s]: %s\n", *addKeyName, key)
+		return
+	}
+
+	if *listKeys {
+		if err := listAllKeys(db); err != nil {
+			log.Fatal("Failed to list keys: ", err)
+		}
+		return
+	}
+
+	cert, err := tls.LoadX509KeyPair("cert.pem", "key.pem")
+	if err != nil {
+		log.Fatal("Failed to load keys: ", err)
+	}
 
 	var count int
 	db.QueryRow("SELECT COUNT(*) FROM api_keys").Scan(&count)
@@ -32,13 +54,13 @@ func main() {
 	}
 
 	config := &tls.Config{Certificates: []tls.Certificate{cert}}
-	listener, err := tls.Listen("tcp", ":28473", config)
+	listener, err := tls.Listen("tcp", ":"+*port, config)
 	if err != nil {
 		log.Fatal("Couldn't start tcp: ", err)
 	}
 	defer listener.Close()
 
-	log.Println("Listening on Port 28473")
+	log.Printf("Listening on Port %s\n", *port)
 	for {
 		conn, err := listener.Accept()
 		if err != nil {

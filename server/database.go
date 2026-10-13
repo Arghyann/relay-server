@@ -4,6 +4,8 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
+	"fmt"
+	"strings"
 
 	_ "modernc.org/sqlite"
 )
@@ -56,4 +58,29 @@ func addKey(db *sql.DB, name string) (string, error) {
 	}
 
 	return key, nil
+}
+
+func listAllKeys(db *sql.DB) error {
+	rows, err := db.Query("SELECT id, name, key, is_active, created_at FROM api_keys ORDER BY id ASC")
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	fmt.Printf("%-4s | %-15s | %-52s | %-8s\n", "ID", "NAME", "KEY", "STATUS")
+	fmt.Println(strings.Repeat("-", 85))
+
+	for rows.Next() {
+		var id, isActive int
+		var name, key, createdAt string
+		if err := rows.Scan(&id, &name, &key, &isActive, &createdAt); err != nil {
+			continue
+		}
+		status := "active"
+		if isActive == 0 {
+			status = "revoked"
+		}
+		fmt.Printf("%-4d | %-15s | %-52s | %-8s\n", id, name, key, status)
+	}
+	return nil
 }
