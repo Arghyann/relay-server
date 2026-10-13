@@ -13,7 +13,8 @@ import (
 func main() {
 	localPort := flag.String("local", "5432", "local port to listen on")
 	targetAddr := flag.String("target", "", "target address e.g. [2001:...]:5432")
-	relayAddr := flag.String("relay", "127.0.0.1:28473", "relay server address")
+	relayAddr := flag.String("relay", "13.207.62.103:28473", "relay server address")
+	apiKey := flag.String("key", "", "API key for relay authentication")
 	flag.Parse()
 
 	if *targetAddr == "" {
@@ -33,11 +34,11 @@ func main() {
 		if err != nil {
 			continue
 		}
-		go handleLocalConn(conn, *relayAddr, *targetAddr)
+		go handleLocalConn(conn, *relayAddr, *targetAddr, *apiKey)
 	}
 }
 
-func handleLocalConn(localConn net.Conn, relayAddr, targetAddr string) {
+func handleLocalConn(localConn net.Conn, relayAddr, targetAddr, apiKey string) {
 	defer localConn.Close()
 
 	relayConn, err := tls.Dial("tcp", relayAddr, &tls.Config{
@@ -49,7 +50,14 @@ func handleLocalConn(localConn net.Conn, relayAddr, targetAddr string) {
 	}
 	defer relayConn.Close()
 
-	_, err = fmt.Fprintf(relayConn, "CONNECT %s HTTP/1.1\r\n\r\n", targetAddr)
+	var req string
+	if apiKey != "" {
+		req = fmt.Sprintf("CONNECT %s HTTP/1.1\r\nX-API-Key: %s\r\n\r\n", targetAddr, apiKey)
+	} else {
+		req = fmt.Sprintf("CONNECT %s HTTP/1.1\r\n\r\n", targetAddr)
+	}
+
+	_, err = relayConn.Write([]byte(req))
 	if err != nil {
 		log.Println("Failed to send CONNECT request:", err)
 		return
@@ -58,7 +66,7 @@ func handleLocalConn(localConn net.Conn, relayAddr, targetAddr string) {
 	buff := make([]byte, 1024)
 	n, err := relayConn.Read(buff)
 	if err != nil || !strings.Contains(string(buff[:n]), "200") {
-		log.Println("Tunnel establishment failed")
+		log.Printf("Tunnel establishment failed: %s\n", string(buff[:n]))
 		return
 	}
 
