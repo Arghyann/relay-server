@@ -8,7 +8,7 @@ A secure, TLS-encrypted tunnel client to connect to remote IPv6 and private serv
 
 ### Option 1: Using Go Install
 ```bash
-go install github.com/Arghyann/relay-server.git/client@latest
+go install github.com/Arghyann/relay-server/client@latest
 ```
 *(Installs directly to `~/go/bin/client`)*
 
