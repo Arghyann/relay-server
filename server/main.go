@@ -107,6 +107,11 @@ func handleConn(conn net.Conn, db *sql.DB) {
 
 	log.Printf("[%s] Authorized user: %s -> %s\n", conn.RemoteAddr(), username, target)
 
+	if target == "/vpn" {
+		handleVPNConn(conn)
+		return
+	}
+
 	targetConn, err := net.Dial("tcp", target)
 	if err != nil {
 		log.Println("Failed to connect to target: ", target, err)

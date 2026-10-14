@@ -8,6 +8,7 @@ import (
 	"log"
 	"net"
 	"strings"
+	"os"
 )
 
 func main() {
@@ -15,7 +16,18 @@ func main() {
 	targetAddr := flag.String("target", "", "target address e.g. [2001:...]:5432")
 	relayAddr := flag.String("relay", "13.207.62.103:28473", "relay server address")
 	apiKey := flag.String("key", "", "API key for relay authentication")
+	vpnMode := flag.Bool("vpn", false, "Start system-level VPN tunnel")
+
 	flag.Parse()
+
+	if *vpnMode {
+		if os.Geteuid() != 0 {
+			log.Fatal("sudo required for VPN boss")
+		}
+		startVPN(*relayAddr, *apiKey)
+		return
+	}
+	
 
 	if *targetAddr == "" {
 		log.Fatal("You must specify a -target address!")
