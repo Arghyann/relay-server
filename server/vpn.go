@@ -37,7 +37,13 @@ func initServerTun() (*water.Interface, error) {
 	cmd := exec.Command("ip", "addr", "add", "198.18.0.1/24", "dev", ifce.Name())
 	if err := cmd.Run(); err != nil {
 		ifce.Close()
-		return nil, fmt.Errorf("failed to assign IP: %v", err)
+		return nil, fmt.Errorf("failed to assign IPv4: %v", err)
+	}
+
+	cmd = exec.Command("ip", "-6", "addr", "add", "fd00:198:18::1/64", "dev", ifce.Name())
+	if err := cmd.Run(); err != nil {
+		ifce.Close()
+		return nil, fmt.Errorf("failed to assign IPv6: %v", err)
 	}
 
 	cmd = exec.Command("ip", "link", "set", ifce.Name(), "up")
@@ -47,11 +53,17 @@ func initServerTun() (*water.Interface, error) {
 	}
 
 	exec.Command("sysctl", "-w", "net.ipv4.ip_forward=1").Run()
+	exec.Command("sysctl", "-w", "net.ipv6.conf.all.forwarding=1").Run()
 
 	ensureIptablesRule("nat", "POSTROUTING", "-s", "198.18.0.0/24", "-j", "MASQUERADE")
 	ensureIptablesRule("", "FORWARD", "-s", "198.18.0.0/24", "-j", "ACCEPT")
 	ensureIptablesRule("", "FORWARD", "-d", "198.18.0.0/24", "-m", "state", "--state", "RELATED,ESTABLISHED", "-j", "ACCEPT")
 	ensureIptablesRule("mangle", "FORWARD", "-p", "tcp", "--tcp-flags", "SYN,RST", "SYN", "-j", "TCPMSS", "--clamp-mss-to-pmtu")
+
+	ensureIp6tablesRule("nat", "POSTROUTING", "-s", "fd00:198:18::/64", "-j", "MASQUERADE")
+	ensureIp6tablesRule("", "FORWARD", "-s", "fd00:198:18::/64", "-j", "ACCEPT")
+	ensureIp6tablesRule("", "FORWARD", "-d", "fd00:198:18::/64", "-m", "state", "--state", "RELATED,ESTABLISHED", "-j", "ACCEPT")
+	ensureIp6tablesRule("mangle", "FORWARD", "-p", "tcp", "--tcp-flags", "SYN,RST", "SYN", "-j", "TCPMSS", "--clamp-mss-to-pmtu")
 
 	serverTun = ifce
 	return serverTun, nil

@@ -10,10 +10,19 @@ import (
 
 func cleanRelayHost(addr string) string {
 	host, _, err := net.SplitHostPort(addr)
-	if err != nil {
-		host = addr
+	if err == nil {
+		return strings.Trim(host, "[]")
 	}
-	return strings.Trim(host, "[]")
+
+	lastColon := strings.LastIndex(addr, ":")
+	if lastColon != -1 {
+		possibleIP := addr[:lastColon]
+		if net.ParseIP(possibleIP) != nil {
+			return possibleIP
+		}
+	}
+
+	return strings.Trim(addr, "[]")
 }
 
 func getGatewayFor(relayIP string) (gateway, iface string, err error) {
@@ -69,7 +78,15 @@ func setupRoutes(relayIP, tunName, gw, dev string) {
 	if err := exec.Command("ip", "route", "add", "128.0.0.0/1", "dev", tunName).Run(); err != nil {
 		log.Printf("Warning: failed to add 128.0.0.0/1: %v", err)
 	}
-	log.Println("Installed IPv4 redirect routes (0.0.0.0/1 & 128.0.0.0/1) ->", tunName)
+
+	if err := exec.Command("ip", "-6", "route", "add", "::/1", "dev", tunName).Run(); err != nil {
+		log.Printf("Warning: failed to add ::/1: %v", err)
+	}
+	if err := exec.Command("ip", "-6", "route", "add", "8000::/1", "dev", tunName).Run(); err != nil {
+		log.Printf("Warning: failed to add 8000::/1: %v", err)
+	}
+
+	log.Println("Installed Dual-Stack redirect routes (IPv4 & IPv6) ->", tunName)
 }
 
 func cleanupRoutes(relayIP, tunName, gw, dev string) {
@@ -77,6 +94,8 @@ func cleanupRoutes(relayIP, tunName, gw, dev string) {
 
 	_ = exec.Command("ip", "route", "del", "0.0.0.0/1", "dev", tunName).Run()
 	_ = exec.Command("ip", "route", "del", "128.0.0.0/1", "dev", tunName).Run()
+	_ = exec.Command("ip", "-6", "route", "del", "::/1", "dev", tunName).Run()
+	_ = exec.Command("ip", "-6", "route", "del", "8000::/1", "dev", tunName).Run()
 
 	cleanIP := cleanRelayHost(relayIP)
 	parsedIP := net.ParseIP(cleanIP)

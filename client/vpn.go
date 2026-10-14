@@ -6,16 +6,16 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"os/exec"
-	"strings"
 	"os"
+	"os/exec"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/songgao/water"
 )
 
-func createTunInterface(ipWithSubnet string) (*water.Interface, error) {
+func createTunInterface(ipv4Subnet, ipv6Subnet string) (*water.Interface, error) {
 	config := water.Config{
 		DeviceType: water.TUN,
 	}
@@ -25,15 +25,21 @@ func createTunInterface(ipWithSubnet string) (*water.Interface, error) {
 		return nil, fmt.Errorf("failed to open TUN interface: %v", err)
 	}
 	log.Println("Created Ephemeral Network Interface: ", ifce.Name())
-	cmd := exec.Command("ip", "addr", "add", ipWithSubnet, "dev", ifce.Name())
-	err = cmd.Run()
-	if err != nil {
+
+	cmd := exec.Command("ip", "addr", "add", ipv4Subnet, "dev", ifce.Name())
+	if err := cmd.Run(); err != nil {
 		ifce.Close()
-		return nil, fmt.Errorf("failed to assign IP address: %v", err)
+		return nil, fmt.Errorf("failed to assign IPv4 address: %v", err)
 	}
+
+	cmd = exec.Command("ip", "-6", "addr", "add", ipv6Subnet, "dev", ifce.Name())
+	if err := cmd.Run(); err != nil {
+		ifce.Close()
+		return nil, fmt.Errorf("failed to assign IPv6 address: %v", err)
+	}
+
 	cmd = exec.Command("ip", "link", "set", ifce.Name(), "up")
-	err = cmd.Run()
-	if err != nil {
+	if err := cmd.Run(); err != nil {
 		ifce.Close()
 		return nil, fmt.Errorf("failed to bring interface up: %v", err)
 	}
@@ -41,14 +47,15 @@ func createTunInterface(ipWithSubnet string) (*water.Interface, error) {
 }
 
 func startVPN(relayAddr string, apiKey string) {
-	tun, err := createTunInterface("198.18.0.2/24")
+	tun, err := createTunInterface("198.18.0.2/24", "fd00:198:18::2/64")
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer tun.Close()
-	gw,dev,err:=getGatewayFor(relayAddr)
-	if err!=nil{
-		log.Fatal("Failed to detect gateway: ",err)
+
+	gw, dev, err := getGatewayFor(relayAddr)
+	if err != nil {
+		log.Fatal("Failed to detect gateway: ", err)
 	}
 
 	relayConn, err := tls.Dial("tcp", relayAddr, &tls.Config{
@@ -68,20 +75,21 @@ func startVPN(relayAddr string, apiKey string) {
 		log.Fatalf("Server rejected VPN handshake: %s", string(buff[:n]))
 	}
 	log.Println("VPN Tunnel established! Streaming raw IP packets...")
-	setupRoutes(relayAddr,tun.Name(),gw,dev)
-	defer cleanupRoutes(relayAddr,tun.Name(),gw,dev)
-	sigchan := make(chan os.Signal,1)
-	signal.Notify(sigchan,os.Interrupt,syscall.SIGTERM)
-	go func(){
+
+	setupRoutes(relayAddr, tun.Name(), gw, dev)
+	defer cleanupRoutes(relayAddr, tun.Name(), gw, dev)
+
+	sigchan := make(chan os.Signal, 1)
+	signal.Notify(sigchan, os.Interrupt, syscall.SIGTERM)
+	go func() {
 		<-sigchan
 		log.Println("Shutting down VPN")
-		cleanupRoutes(relayAddr,tun.Name(),gw,dev)
+		cleanupRoutes(relayAddr, tun.Name(), gw, dev)
 		tun.Close()
 		relayConn.Close()
 		os.Exit(0)
-
 	}()
-	// Stream A: Packets from OS (tun) -> encrypt and send to Relay over TLS
+
 	go func() {
 		packet := make([]byte, 1500)
 		for {
@@ -94,7 +102,6 @@ func startVPN(relayAddr string, apiKey string) {
 		}
 	}()
 
-	// Stream B: Packets from Relay -> inject into OS (tun)
 	for {
 		var length uint16
 		err = binary.Read(relayConn, binary.BigEndian, &length)
