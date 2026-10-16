@@ -45,7 +45,7 @@ func getGatewayFor(relayIP string) (gateway, iface string, err error) {
 	return gateway, iface, nil
 }
 
-func setupRoutes(relayIP, tunName, gw, dev string) {
+func setupRoutes(relayIP, tunName, gw, dev, clientIPv6 string) {
 	cleanIP := cleanRelayHost(relayIP)
 	parsedIP := net.ParseIP(cleanIP)
 
@@ -79,10 +79,14 @@ func setupRoutes(relayIP, tunName, gw, dev string) {
 		log.Printf("Warning: failed to add 128.0.0.0/1: %v", err)
 	}
 
-	if err := exec.Command("ip", "-6", "route", "add", "::/1", "dev", tunName, "src", "fd00:198:18::2").Run(); err != nil {
+	if clientIPv6 == "" {
+		clientIPv6 = "fd00:198:18::2"
+	}
+
+	if err := exec.Command("ip", "-6", "route", "add", "::/1", "dev", tunName, "src", clientIPv6).Run(); err != nil {
 		log.Printf("Warning: failed to add ::/1: %v", err)
 	}
-	if err := exec.Command("ip", "-6", "route", "add", "8000::/1", "dev", tunName, "src", "fd00:198:18::2").Run(); err != nil {
+	if err := exec.Command("ip", "-6", "route", "add", "8000::/1", "dev", tunName, "src", clientIPv6).Run(); err != nil {
 		log.Printf("Warning: failed to add 8000::/1: %v", err)
 	}
 

@@ -47,12 +47,6 @@ func createTunInterface(ipv4Subnet, ipv6Subnet string) (*water.Interface, error)
 }
 
 func startVPN(relayAddr string, apiKey string) {
-	tun, err := createTunInterface("198.18.0.2/24", "fd00:198:18::2/64")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer tun.Close()
-
 	gw, dev, err := getGatewayFor(relayAddr)
 	if err != nil {
 		log.Fatal("Failed to detect gateway: ", err)
@@ -74,9 +68,31 @@ func startVPN(relayAddr string, apiKey string) {
 	if err != nil || !strings.Contains(string(buff[:n]), "200") {
 		log.Fatalf("Server rejected VPN handshake: %s", string(buff[:n]))
 	}
-	log.Println("VPN Tunnel established! Streaming raw IP packets...")
 
-	setupRoutes(relayAddr, tun.Name(), gw, dev)
+	assignedIPv4 := "198.18.0.2/24"
+	assignedIPv6 := "fd00:198:18::2/64"
+
+	for _, line := range strings.Split(string(buff[:n]), "\r\n") {
+		lower := strings.ToLower(line)
+		if strings.HasPrefix(lower, "x-client-ipv4:") {
+			assignedIPv4 = strings.TrimSpace(line[len("x-client-ipv4:"):])
+		}
+		if strings.HasPrefix(lower, "x-client-ipv6:") {
+			assignedIPv6 = strings.TrimSpace(line[len("x-client-ipv6:"):])
+		}
+	}
+
+	log.Printf("VPN Tunnel established! Assigned IPs: [%s, %s]\n", assignedIPv4, assignedIPv6)
+
+	tun, err := createTunInterface(assignedIPv4, assignedIPv6)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer tun.Close()
+
+	clientIPv6 := strings.Split(assignedIPv6, "/")[0]
+
+	setupRoutes(relayAddr, tun.Name(), gw, dev, clientIPv6)
 	defer cleanupRoutes(relayAddr, tun.Name(), gw, dev)
 
 	sigchan := make(chan os.Signal, 1)

@@ -20,14 +20,15 @@ func main() {
 
 	flag.Parse()
 
+	key := resolveAPIKey(*apiKey)
+
 	if *vpnMode {
 		if os.Geteuid() != 0 {
 			log.Fatal("sudo required for VPN boss")
 		}
-		startVPN(*relayAddr, *apiKey)
+		startVPN(*relayAddr, key)
 		return
 	}
-	
 
 	if *targetAddr == "" {
 		log.Fatal("You must specify a -target address!")
@@ -46,7 +47,7 @@ func main() {
 		if err != nil {
 			continue
 		}
-		go handleLocalConn(conn, *relayAddr, *targetAddr, *apiKey)
+		go handleLocalConn(conn, *relayAddr, *targetAddr, key)
 	}
 }
 
